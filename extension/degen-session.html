@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Degen DJ Session</title>
+    <link rel="stylesheet" href="degen-session.css" />
+  </head>
+  <body>
+    <main class="session-shell">
+      <header class="session-header">
+        <div>
+          <p>Companion audio session</p>
+          <h1>Degen DJ</h1>
+        </div>
+        <div class="badges">
+          <span>NO GAME AUTOMATION</span>
+          <span>NO WALLET SIGNATURES</span>
+          <a id="open-source" href="http://localhost:5173" target="_blank" rel="noreferrer">Open source app</a>
+        </div>
+      </header>
+
+      <section class="session-grid">
+        <iframe id="degen-frame" title="Degen DJ full session" allow="autoplay; clipboard-write"></iframe>
+        <aside class="session-rail">
+          <h2>While You Play</h2>
+          <p>
+            Keep this tab open for the room and audio session, then return to Kintara.
+            Browser autoplay rules may require one click inside the room before music starts.
+          </p>
+          <div class="panel">
+            <strong>Safe boundary</strong>
+            <span>This page does not read Kintara auth, click game UI, or mutate marketplace state.</span>
+          </div>
+          <button id="focus-room" type="button">Focus room</button>
+        </aside>
+      </section>
+    </main>
+    <script src="degen-session.js"></script>
+  </body>
+</html>

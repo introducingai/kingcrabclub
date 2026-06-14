@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Kintara Companion Overlay",
+  "version": "0.1.0",
+  "description": "Read-only Kintara marketplace intelligence and Degen DJ room dock.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://kintara.gg/*",
+    "https://www.kintara.gg/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
+    "http://localhost:5173/*",
+    "http://127.0.0.1:5173/*"
+  ],
+  "action": {
+    "default_title": "Kintara Companion",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://kintara.gg/*", "https://www.kintara.gg/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

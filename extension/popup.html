@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kintara Companion</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <section class="hero">
+        <p>Read-only overlay</p>
+        <h1>Kintara Companion</h1>
+        <span>NO AUTOMATION - NO MARKETPLACE WRITES</span>
+      </section>
+
+      <form id="settings-form" class="form">
+        <label>
+          Companion dashboard URL
+          <input id="companion-base-url" name="companionBaseUrl" placeholder="http://localhost:3000" />
+        </label>
+        <label>
+          Degen DJ room URL
+          <input id="degen-dj-url" name="degenDjUrl" placeholder="http://localhost:5173" />
+        </label>
+        <label>
+          Overlay position
+          <select id="dock-position" name="dockPosition">
+            <option value="left">Left side</option>
+            <option value="right">Right side</option>
+            <option value="bottom-left">Bottom left</option>
+            <option value="bottom-right">Bottom right</option>
+          </select>
+        </label>
+        <button type="submit">Save settings</button>
+      </form>
+
+      <div id="status" class="status">Settings are stored locally in your browser.</div>
+
+      <div class="links">
+        <a id="open-dashboard" href="http://localhost:3000/market" target="_blank" rel="noreferrer">Open dashboard</a>
+        <a id="open-degen-session" href="degen-session.html" target="_blank" rel="noreferrer">Degen session</a>
+        <a id="open-kintara" href="https://kintara.gg" target="_blank" rel="noreferrer">Open Kintara</a>
+      </div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

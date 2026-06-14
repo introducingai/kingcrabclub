@@ -1,0 +1,21 @@
+# Visual QA Checklist
+
+- [x] Tailwind CSS is compiled and served through `app/globals.css`.
+- [x] No default blue browser links are visible.
+- [x] Body uses a dark background, sans-serif font, and readable text color.
+- [x] Header logo, title, and nav are aligned on desktop.
+- [x] Lucide icons use explicit `h-* w-*` sizing classes.
+- [x] Cards and panels have visible rounded corners, thick borders, and dark gradients.
+- [x] Dashboard loading states do not masquerade as zero-count data.
+- [x] API failures render styled messages with HTTP status and source path.
+- [x] `/`, `/market`, `/account`, and `/market/wood` render as styled dark marketplace pages.
+- [x] Dashboard and Market show live status and last-updated text.
+- [x] Market live API keeps last known snapshot on upstream failure when one exists.
+- [x] Live Activity feed renders generated market events from snapshot diffs.
+- [x] Item detail has gold/KINS toggles and a multi-series chart surface.
+- [x] Item detail terminal uses Listed Value, Listed Supply, Floor Price, 30D Avg Sale, 30D Sales, and Active Listings terminology.
+- [x] `/market/wood` item API returns metrics, sales stats, history, and token/gold order books.
+- [x] Stage 1 Account Mode shows wallet summary, watchlists, saved searches, disabled alerts, and mock integration panels.
+- [x] Mock official integration routes require mock mode, mock auth, idempotency keys, and request validation.
+- [x] Mock create/cancel/checkout flows mutate local mock memory only and do not call wallet signing methods.
+- [x] No wallet prompts or marketplace write calls are present in v1.
