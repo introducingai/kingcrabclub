@@ -1,573 +1,645 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import {
-  Crown,
-  Headphones,
-  MessageSquare,
-  Mic2,
-  Radio,
-  ShieldCheck,
-  Sparkles,
-  Users,
-  Volume2,
-} from "lucide-react";
-import { Badge } from "./ui/badge";
+import { ExternalLink } from "lucide-react";
+import { fetchListings } from "@/lib/kintaraApi";
+import { fetchDexScreenerKinsPairs } from "@/lib/tokenApi";
+import { formatCompact, formatNumber, formatUsd } from "@/lib/format";
+import type { MarketListing, TokenStats } from "@/lib/types";
 
-type AvatarTone = "bone" | "purple" | "lime" | "red" | "blue" | "gold";
+type Outfit = "purple" | "red" | "blue" | "green" | "gold" | "ghost";
 
-type ClubGuest = {
+type ClubPlayer = {
   id: string;
   name: string;
   level: number;
-  tone: AvatarTone;
+  outfit: Outfit;
   x: number;
   y: number;
-  zone: "bar" | "dance" | "stage" | "vip" | "lounge";
+  host?: boolean;
 };
 
-const baseGuests: ClubGuest[] = [
-  { id: "host", name: "000", level: 18, tone: "bone", x: 520, y: 332, zone: "dance" },
-  { id: "dj", name: "deckhand", level: 12, tone: "purple", x: 832, y: 214, zone: "stage" },
-  { id: "bar", name: "crabhost", level: 9, tone: "blue", x: 244, y: 248, zone: "bar" },
-  { id: "vip", name: "baited", level: 16, tone: "gold", x: 572, y: 132, zone: "vip" },
-  { id: "chat", name: "alphafi", level: 7, tone: "lime", x: 362, y: 472, zone: "lounge" },
-  { id: "queue", name: "runner", level: 14, tone: "red", x: 716, y: 398, zone: "dance" },
+type QueueTrack = {
+  id: string;
+  dj: ClubPlayer;
+  track: string;
+  source: "YouTube" | "SoundCloud";
+  current?: boolean;
+};
+
+const players: ClubPlayer[] = [
+  { id: "host", name: "000", level: 18, outfit: "gold", x: 48, y: 52, host: true },
+  { id: "nyxen", name: "Nyxen", level: 20, outfit: "purple", x: 58, y: 42 },
+  { id: "fish", name: "Fishcake", level: 8, outfit: "blue", x: 34, y: 48 },
+  { id: "runner", name: "runner", level: 14, outfit: "red", x: 68, y: 61 },
+  { id: "melly", name: "Melly", level: 12, outfit: "green", x: 42, y: 32 },
+  { id: "book", name: "Book", level: 10, outfit: "blue", x: 76, y: 44 },
+  { id: "alpha", name: "alphafi", level: 7, outfit: "purple", x: 28, y: 63 },
 ];
 
-const arrivingGuests: ClubGuest[] = [
-  { id: "arrive-1", name: "fishcake", level: 8, tone: "blue", x: 476, y: 426, zone: "dance" },
-  { id: "arrive-2", name: "Nyxen", level: 20, tone: "purple", x: 664, y: 306, zone: "dance" },
-  { id: "arrive-3", name: "Book", level: 10, tone: "lime", x: 786, y: 454, zone: "stage" },
-  { id: "arrive-4", name: "gates", level: 6, tone: "gold", x: 162, y: 382, zone: "bar" },
-  { id: "arrive-5", name: "melly", level: 12, tone: "bone", x: 436, y: 154, zone: "vip" },
-  { id: "arrive-6", name: "greenzy", level: 4, tone: "red", x: 300, y: 536, zone: "lounge" },
+const queue: QueueTrack[] = [
+  {
+    id: "q1",
+    dj: players[0],
+    track: "Crab Market Open",
+    source: "YouTube",
+    current: true,
+  },
+  { id: "q2", dj: players[2], track: "Beach Alpha Hour", source: "SoundCloud" },
+  { id: "q3", dj: players[1], track: "Potion Floor Sweep", source: "YouTube" },
+  { id: "q4", dj: players[5], track: "Dockside Loop", source: "SoundCloud" },
 ];
 
-const queue = [
-  { user: "deckhand", track: "Crab Market Open", eta: "Live" },
-  { user: "alphafi", track: "Beach Alpha Hour", eta: "03:42" },
-  { user: "Nyxen", track: "Potion Floor Sweep", eta: "07:18" },
-  { user: "runner", track: "Dockside Loop", eta: "11:06" },
+const navItems = [
+  { href: "/degen", label: "Club" },
+  { href: "/market", label: "Market" },
+  { href: "/market/wood", label: "Stats" },
+  { href: "/account", label: "Account" },
 ];
 
-const chatLines = [
-  { user: "crabhost", text: "welcome to the soft launch room" },
-  { user: "000", text: "floor feed on left, music on right" },
-  { user: "alphafi", text: "if kintara gives auth, avatars mirror from profile" },
-  { user: "deckhand", text: "no signatures, just vibes and public room state" },
-];
+const itemGlyphs = ["🪵", "⛏", "🧪", "🎣"];
 
 export function DegenClubRoom() {
-  const [guests, setGuests] = useState(baseGuests);
-  const [pulse, setPulse] = useState(0);
+  const listingsQuery = useQuery({
+    queryKey: ["king-crab-market-pulse"],
+    queryFn: () => fetchListings({ limit: 4, sort: "latest" }),
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.hidden ? 30000 : 10000,
+    placeholderData: (previous) => previous,
+  });
+  const tokenQuery = useQuery({
+    queryKey: ["king-crab-kins"],
+    queryFn: fetchDexScreenerKinsPairs,
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.hidden ? 60000 : 30000,
+    placeholderData: (previous) => previous,
+  });
+  const listings = listingsQuery.data?.listings.slice(0, 4) ?? [];
+  const onlineCount = players.length + 1;
+  const currentTrack = queue.find((track) => track.current) ?? queue[0];
 
-  useEffect(() => {
-    const pulseTimer = window.setInterval(() => {
-      setPulse((current) => (current + 1) % 4);
-    }, 900);
-
-    const arrivalTimer = window.setInterval(() => {
-      setGuests((current) => {
-        if (current.length >= baseGuests.length + arrivingGuests.length) {
-          return current;
+  return (
+    <div className="fixed inset-0 z-[9999] overflow-hidden bg-[var(--kc-void)] text-[#f8f3ff] [--kc-deep:#0f0f1e] [--kc-gold:#f5c842] [--kc-pink:#ff4da6] [--kc-purple:#9d70ff] [--kc-surface:#141428] [--kc-teal:#00e5c8] [font-family:'Space_Grotesk','Space Grotesk',Inter,ui-sans-serif,system-ui,sans-serif]">
+      <style jsx global>{`
+        @keyframes kc-pulse-dot {
+          0%,
+          100% {
+            opacity: 0.55;
+            transform: scale(0.88);
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1);
+          }
         }
 
-        return [...current, arrivingGuests[current.length - baseGuests.length]];
-      });
-    }, 4200);
+        @keyframes kc-wave {
+          0%,
+          100% {
+            height: 8px;
+          }
+          50% {
+            height: 28px;
+          }
+        }
 
-    return () => {
-      window.clearInterval(pulseTimer);
-      window.clearInterval(arrivalTimer);
-    };
-  }, []);
+        @keyframes kc-bars {
+          0%,
+          100% {
+            height: 4px;
+          }
+          50% {
+            height: 18px;
+          }
+        }
 
-  const zoneCounts = useMemo(
-    () =>
-      guests.reduce(
-        (counts, guest) => {
-          counts[guest.zone] += 1;
-          return counts;
-        },
-        { bar: 0, dance: 0, stage: 0, vip: 0, lounge: 0 },
-      ),
-    [guests],
-  );
+        .kc-mono {
+          font-family: "Space Mono", "Space_Mono", ui-monospace, SFMono-Regular,
+            Menlo, Monaco, Consolas, monospace;
+        }
 
-  return (
-    <div className="space-y-4">
-      <section className="kintara-panel rounded-lg p-4 sm:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        .kc-neon-sign {
+          text-shadow:
+            0 0 8px var(--kc-pink),
+            0 0 18px rgba(255, 77, 166, 0.75),
+            0 0 34px rgba(255, 77, 166, 0.45);
+        }
+
+        .kc-teal-glow {
+          text-shadow:
+            0 0 7px var(--kc-teal),
+            0 0 18px rgba(0, 229, 200, 0.44);
+        }
+      `}</style>
+
+      <header className="flex h-[76px] items-center justify-between border-b border-[rgba(130,100,220,0.2)] bg-[var(--kc-void)] px-6">
+        <Link href="/degen" className="group flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center border border-[rgba(180,140,255,0.4)] bg-[var(--kc-surface)] text-2xl transition-transform group-hover:-translate-y-1">
+            🦀
+          </div>
           <div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">King Crab Club</Badge>
-              <Badge variant="outline">Degen DJ visual shell</Badge>
-              <Badge variant="outline">Mock room presence</Badge>
-              <Badge variant="outline">Avatar mirror pending official auth</Badge>
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg border-2 border-fuchsia-400/50 bg-fuchsia-500/15 shadow-[0_0_22px_rgb(217_70_239_/_0.35)]">
-                <Radio className="h-5 w-5 text-fuchsia-200" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold tracking-normal">
-                  King Crab Club radio room
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  In-world club concept for music queueing, alpha chat, and future
-                  Kintara avatar mirroring.
-                </p>
-              </div>
-            </div>
+            <h1 className="text-xl font-black uppercase tracking-[0.12em] text-white">
+              King Crab Club
+            </h1>
+            <p className="kc-mono mt-0.5 text-[11px] uppercase tracking-[0.18em] text-[var(--kc-teal)]">
+              Kintara World · Est. 2026
+            </p>
           </div>
+        </Link>
 
-          <div className="flex flex-wrap gap-2">
-            <SafetyPill icon={ShieldCheck} text="No wallet signatures" />
-            <SafetyPill icon={Users} text={`${guests.length} avatars inside`} />
+        <nav className="hidden items-center border border-[rgba(130,100,220,0.2)] bg-[var(--kc-deep)] p-1 md:flex">
+          {navItems.map((item) => (
             <Link
-              href="/"
-              className="inline-flex h-10 items-center rounded-md border-2 px-4 text-sm font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              key={item.href}
+              href={item.href}
+              className="kc-mono px-4 py-2 text-xs font-bold uppercase tracking-[0.15em] text-[#b8afd9] transition-colors hover:bg-[rgba(157,112,255,0.14)] hover:text-white"
             >
-              Companion
+              {item.label}
             </Link>
-          </div>
+          ))}
+        </nav>
+
+        <div className="kc-mono flex items-center gap-2 border border-[rgba(0,229,200,0.35)] bg-[var(--kc-deep)] px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--kc-teal)]">
+          <span className="h-2.5 w-2.5 bg-[var(--kc-teal)] [animation:kc-pulse-dot_1.2s_ease-in-out_infinite]" />
+          {onlineCount} online
         </div>
-      </section>
+      </header>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="overflow-hidden rounded-lg border-2 border-[#1f1b2c] bg-[#101018] shadow-[0_22px_80px_rgb(0_0_0_/_0.42)]">
-          <div className="flex items-center justify-between border-b-2 border-[#241d36] bg-[#151522] px-4 py-3">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-fuchsia-200">
-                Isometric club render
-              </p>
-              <h2 className="text-lg font-semibold">Degen DJ x Kintara room concept</h2>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-fuchsia-300/30 bg-fuchsia-500/10 px-3 py-1 text-xs font-black uppercase tracking-[0.14em] text-fuchsia-100">
-              <Volume2 className="h-3.5 w-3.5" />
-              Live shell
-            </div>
-          </div>
-          <div className="relative min-h-[720px] overflow-hidden bg-[radial-gradient(circle_at_50%_40%,rgb(76_29_149_/_0.28),transparent_36rem),linear-gradient(180deg,#17171f,#08080d)]">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,transparent_0,transparent_28rem,rgb(0_0_0_/_0.64)_50rem)]" />
-            <ClubStage pulse={pulse} />
-            {guests.map((guest) => (
-              <RoomAvatar key={guest.id} guest={guest} pulse={pulse} />
-            ))}
-          </div>
-        </div>
+      <main className="grid h-[calc(100vh-76px)] grid-cols-1 gap-4 overflow-hidden p-4 pb-[84px] lg:grid-cols-[minmax(0,1fr)_280px]">
+        <section className="relative min-h-[560px] overflow-hidden border border-[rgba(130,100,220,0.2)] bg-[var(--kc-deep)]">
+          <IsoTileFloor />
+          <NeonSign />
+          <DjBoothSvg />
 
-        <aside className="space-y-4">
-          <RoomNowPlaying />
-          <RoomQueue />
-          <RoomPresence zoneCounts={zoneCounts} />
-          <MirrorPipeline />
-          <RoomChat />
-        </aside>
-      </section>
-    </div>
-  );
-}
+          {players.map((player) => (
+            <SceneAvatar key={player.id} player={player} />
+          ))}
 
-function ClubStage({ pulse }: { pulse: number }) {
-  return (
-    <div className="absolute left-1/2 top-1/2 h-[580px] w-[980px] -translate-x-1/2 -translate-y-1/2 rotate-[-26deg]">
-      <div className="absolute inset-0 border-4 border-[#2e2740] bg-[#252437] shadow-[34px_34px_0_#0c0c12]">
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgb(255_255_255_/_0.045)_1px,transparent_1px),linear-gradient(rgb(0_0_0_/_0.24)_1px,transparent_1px)] bg-[size:42px_42px]" />
-        <div className="absolute inset-5 border-2 border-[#38314b]" />
-      </div>
+          <Link
+            href="/account"
+            className="group absolute left-[18%] top-[38%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 transition-transform hover:-translate-y-[calc(50%+4px)]"
+          >
+            <PixelAvatar outfit="ghost" />
+            <span className="kc-mono border border-dashed border-[rgba(180,140,255,0.4)] bg-[rgba(10,10,18,0.78)] px-2 py-1 text-[11px] uppercase tracking-[0.12em] text-[#b8afd9]">
+              +you?
+            </span>
+          </Link>
 
-      <Wall side="left" />
-      <Wall side="top" />
-      <Bar />
-      <VipLounge />
-      <DjBooth pulse={pulse} />
-      <DanceFloor pulse={pulse} />
-      <Seating />
-      <ExitDoor />
-      <Restrooms />
-      <Planter x={120} y={88} />
-      <Planter x={872} y={128} />
-      <Planter x={196} y={500} />
-      <Planter x={910} y={430} />
-      <RopeLine x={118} y={462} />
-      <RopeLine x={596} y={116} />
-      <RopeLine x={750} y={396} />
-    </div>
-  );
-}
+          <section className="absolute bottom-4 left-4 right-4 grid gap-3 lg:grid-cols-2">
+            <TurntableQueue />
+            <MarketPulse
+              listings={listings}
+              isLoading={listingsQuery.isLoading}
+              error={listingsQuery.isError ? listingsQuery.error : null}
+            />
+          </section>
+        </section>
 
-function Wall({ side }: { side: "left" | "top" }) {
-  const className =
-    side === "left"
-      ? "absolute left-0 top-0 h-[580px] w-10 bg-[#181722] shadow-[10px_0_0_#0b0b10]"
-      : "absolute left-0 top-0 h-10 w-[980px] bg-[#181722] shadow-[0_10px_0_#0b0b10]";
-
-  return <div className={className} />;
-}
-
-function Bar() {
-  return (
-    <div className="absolute left-[54px] top-[134px] h-[160px] w-[380px] border-2 border-[#16121c] bg-[#1d1a28] shadow-[14px_14px_0_#0a0910]">
-      <div className="absolute left-8 top-4 text-[34px] font-black uppercase leading-8 tracking-[0.12em] text-fuchsia-300 [text-shadow:0_0_12px_#e879f9,0_0_28px_#c026d3]">
-        King Crab
-        <br />
-        Club
-      </div>
-      <div className="absolute left-8 top-[90px] h-3 w-[300px] bg-fuchsia-400 shadow-[0_0_18px_#e879f9]" />
-      <div className="absolute left-8 top-[110px] flex gap-2">
-        {Array.from({ length: 15 }).map((_, index) => (
-          <div
-            key={index}
-            className="h-8 w-3 rounded-sm border border-black bg-[#8b5e34]"
+        <aside className="grid min-h-0 gap-4 overflow-y-auto lg:block lg:space-y-4">
+          <LoginCard />
+          <KinsTokenWidget
+            stats={tokenQuery.data}
+            isLoading={tokenQuery.isLoading}
+            error={tokenQuery.isError ? tokenQuery.error : null}
           />
-        ))}
-      </div>
-      <div className="absolute left-8 top-[144px] h-7 w-[308px] border-2 border-[#151018] bg-[#111019] shadow-[0_0_16px_rgb(217_70_239_/_0.55)]" />
-      <div className="absolute left-[338px] top-[78px] rounded-sm border border-red-300 px-1 text-[18px] font-black text-red-300 [text-shadow:0_0_10px_#ef4444]">
-        crab
-      </div>
+          <ClubNowList />
+        </aside>
+      </main>
+
+      <NowPlayingBar track={currentTrack} />
     </div>
   );
 }
 
-function VipLounge() {
+function IsoTileFloor() {
   return (
-    <div className="absolute left-[502px] top-[58px] h-[170px] w-[270px] border-2 border-[#1a1323] bg-[#221c32] shadow-[12px_12px_0_#0c0911]">
-      <div className="absolute left-6 top-6 h-12 w-44 bg-[#4f254f]" />
-      <div className="absolute left-6 top-[76px] h-12 w-44 bg-[#4f254f]" />
-      <div className="absolute left-[190px] top-6 h-28 w-14 bg-[#4f254f]" />
-      <div className="absolute left-24 top-20 h-12 w-14 border-2 border-[#111018] bg-[#171521]">
-        <div className="m-auto mt-3 h-5 w-5 bg-violet-200 shadow-[0_0_18px_#c4b5fd]" />
-      </div>
-      <div className="absolute left-4 top-3 text-xs font-black uppercase tracking-[0.18em] text-fuchsia-200">
-        VIP
-      </div>
-    </div>
+    <svg
+      aria-hidden="true"
+      className="absolute inset-0 h-full w-full"
+      viewBox="0 0 1100 720"
+      preserveAspectRatio="xMidYMid slice"
+    >
+      <rect width="1100" height="720" fill="#0f0f1e" />
+      <g opacity="0.8" transform="translate(550 340) rotate(45) scale(1 .52)">
+        {Array.from({ length: 19 }).map((_, row) =>
+          Array.from({ length: 25 }).map((__, col) => {
+            const x = (col - 12) * 44;
+            const y = (row - 9) * 44;
+            const isAlt = (row + col) % 2 === 0;
+            const dance =
+              row >= 8 && row <= 12 && col >= 10 && col <= 14
+                ? ["#9d70ff", "#ff4da6", "#00e5c8"][(row + col) % 3]
+                : undefined;
+
+            return (
+              <rect
+                key={`${row}-${col}`}
+                x={x}
+                y={y}
+                width="44"
+                height="44"
+                fill={dance ?? (isAlt ? "#17172c" : "#121225")}
+                stroke="#282042"
+                strokeWidth="1"
+                opacity={dance ? 0.38 : 1}
+              />
+            );
+          }),
+        )}
+      </g>
+      <g opacity="0.16">
+        <rect x="0" y="0" width="1100" height="720" fill="#0a0a12" />
+      </g>
+      <rect x="65" y="72" width="970" height="560" fill="none" stroke="rgba(180,140,255,0.25)" />
+    </svg>
   );
 }
 
-function DjBooth({ pulse }: { pulse: number }) {
+function NeonSign() {
   return (
-    <div className="absolute left-[726px] top-[146px] h-[230px] w-[210px] border-2 border-[#111018] bg-[#171622] shadow-[14px_14px_0_#07070b]">
-      <div className="absolute left-4 top-5 h-[190px] w-[170px] border-2 border-[#2c2444] bg-[#101019]">
-        <div className="absolute left-4 top-[112px] h-12 w-32 border-2 border-black bg-[#1d2430] shadow-[0_0_16px_rgb(59_130_246_/_0.5)]">
-          <div className="absolute left-5 top-3 h-6 w-6 rounded-full border-2 border-cyan-300 bg-[#28243c]" />
-          <div className="absolute right-5 top-3 h-6 w-6 rounded-full border-2 border-fuchsia-300 bg-[#28243c]" />
-          <div className="absolute left-[58px] top-5 h-1 w-8 bg-emerald-300" />
-        </div>
-        <LightBeam color="blue" active={pulse % 2 === 0} left={22} top={30} rotate={-24} />
-        <LightBeam color="pink" active={pulse % 2 === 1} left={86} top={26} rotate={20} />
-        <LightBeam color="blue" active={pulse % 3 === 0} left={126} top={46} rotate={-10} />
-        <div className="absolute left-0 top-0 h-full w-3 bg-fuchsia-500 shadow-[0_0_24px_#d946ef]" />
-        <div className="absolute right-0 top-0 h-full w-3 bg-blue-400 shadow-[0_0_24px_#60a5fa]" />
-      </div>
-      <div className="absolute left-4 top-[206px] h-3 w-[172px] bg-fuchsia-500 shadow-[0_0_18px_#d946ef]" />
+    <div className="absolute left-8 top-8">
+      <p className="kc-neon-sign text-3xl font-black uppercase tracking-[0.16em] text-[var(--kc-pink)]">
+        ♛ King Crab Club
+      </p>
+      <p className="kc-mono kc-teal-glow mt-2 text-xs font-bold uppercase tracking-[0.2em] text-[var(--kc-teal)]">
+        ▶ live session · kintara world
+      </p>
     </div>
   );
 }
 
-function LightBeam({
-  color,
-  active,
-  left,
-  top,
-  rotate,
-}: {
-  color: "pink" | "blue";
-  active: boolean;
-  left: number;
-  top: number;
-  rotate: number;
-}) {
-  const colorClass =
-    color === "pink"
-      ? "from-fuchsia-400/80 to-fuchsia-400/0"
-      : "from-blue-400/80 to-blue-400/0";
+function DjBoothSvg() {
+  return (
+    <svg
+      aria-label="DJ booth"
+      className="absolute right-8 top-10 h-[230px] w-[300px]"
+      viewBox="0 0 300 230"
+    >
+      <g>
+        <polygon points="80,72 238,20 286,76 128,128" fill="#151526" stroke="#9d70ff" />
+        <polygon points="128,128 286,76 286,144 128,198" fill="#10101e" stroke="#4d3a7e" />
+        <polygon points="80,72 128,128 128,198 80,140" fill="#0c0c18" stroke="#4d3a7e" />
+        <rect x="130" y="70" width="118" height="48" fill="#0a0a12" stroke="#00e5c8" />
+        <polyline
+          points="140,96 152,88 164,102 176,82 188,102 202,92 216,98 236,78"
+          fill="none"
+          stroke="#00e5c8"
+          strokeWidth="3"
+        />
+        <circle cx="124" cy="96" r="24" fill="#141428" stroke="#ff4da6" strokeWidth="3" />
+        <circle cx="248" cy="66" r="22" fill="#141428" stroke="#9d70ff" strokeWidth="3" />
+        <rect x="176" y="118" width="46" height="18" fill="#252541" stroke="#00e5c8" />
+        <Speaker x={34} y={82} />
+        <Speaker x={250} y={140} />
+        <g transform="translate(172 8)">
+          <rect x="18" y="16" width="22" height="24" fill="#111" />
+          <rect x="14" y="34" width="30" height="34" fill="#22223a" stroke="#9d70ff" />
+          <rect x="10" y="22" width="8" height="16" fill="#00e5c8" />
+          <rect x="40" y="22" width="8" height="16" fill="#00e5c8" />
+        </g>
+      </g>
+    </svg>
+  );
+}
 
+function Speaker({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      <rect width="34" height="76" fill="#0a0a12" stroke="#3d315f" />
+      <circle cx="17" cy="22" r="10" fill="#141428" stroke="#9d70ff" />
+      <circle cx="17" cy="54" r="13" fill="#141428" stroke="#ff4da6" />
+    </g>
+  );
+}
+
+function SceneAvatar({ player }: { player: ClubPlayer }) {
   return (
     <div
-      className={`absolute h-5 w-36 origin-left bg-gradient-to-r ${colorClass} blur-[1px] transition-opacity ${active ? "opacity-90" : "opacity-35"}`}
-      style={{ left, top, transform: `rotate(${rotate}deg)` }}
-    />
+      className="group absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 transition-transform hover:-translate-y-[calc(50%+4px)]"
+      style={{ left: `${player.x}%`, top: `${player.y}%` }}
+    >
+      <PixelAvatar outfit={player.outfit} host={player.host} />
+      <span className="text-center text-[12px] font-black leading-3 text-white [text-shadow:0_2px_0_#000,1px_0_0_#000,-1px_0_0_#000]">
+        <span className="block text-[10px] text-[var(--kc-pink)]">Lvl {player.level}</span>
+        {player.name}
+      </span>
+    </div>
   );
 }
 
-function DanceFloor({ pulse }: { pulse: number }) {
-  const colors = ["#a78bfa", "#f472b6", "#60a5fa", "#c084fc"];
+function PixelAvatar({
+  outfit,
+  host,
+  small = false,
+}: {
+  outfit: Outfit;
+  host?: boolean;
+  small?: boolean;
+}) {
+  const colors: Record<Outfit, { body: string; hood: string; pants: string; skin: string }> = {
+    purple: { body: "#6b3bd1", hood: "#17111f", pants: "#12121d", skin: "#d7b18e" },
+    red: { body: "#c94141", hood: "#1b1111", pants: "#1a1720", skin: "#d7b18e" },
+    blue: { body: "#2b68d8", hood: "#111827", pants: "#131827", skin: "#d7b18e" },
+    green: { body: "#37a36b", hood: "#202616", pants: "#15191d", skin: "#d7b18e" },
+    gold: { body: "#f5c842", hood: "#3d2c0b", pants: "#181412", skin: "#d7b18e" },
+    ghost: { body: "transparent", hood: "transparent", pants: "transparent", skin: "transparent" },
+  };
+  const c = colors[outfit];
+  const sizeClass = small ? "h-11 w-8" : "h-[44px] w-8";
+  const opacity = outfit === "ghost" ? 0.55 : 1;
 
   return (
-    <div className="absolute left-[426px] top-[308px] grid grid-cols-5 gap-1 border-2 border-[#111018] bg-[#111018] p-1 shadow-[0_0_38px_rgb(168_85_247_/_0.42)]">
-      {Array.from({ length: 25 }).map((_, index) => {
-        const color = colors[(index + pulse) % colors.length];
+    <svg
+      aria-hidden="true"
+      className={sizeClass}
+      viewBox="0 0 32 44"
+      style={{ opacity }}
+    >
+      {outfit === "ghost" ? (
+        <>
+          <rect x="7" y="7" width="18" height="16" fill="none" stroke="#b48cff" strokeDasharray="3 2" />
+          <rect x="5" y="22" width="22" height="17" fill="none" stroke="#b48cff" strokeDasharray="3 2" />
+        </>
+      ) : (
+        <>
+          {host ? <polygon points="8,2 13,8 16,2 19,8 24,2 24,10 8,10" fill="#f5c842" /> : null}
+          <rect x="9" y="8" width="15" height="8" fill={c.hood} stroke="#05050a" />
+          <rect x="8" y="15" width="17" height="14" fill={c.skin} stroke="#05050a" />
+          <rect x="12" y="20" width="2" height="3" fill="#05050a" />
+          <rect x="20" y="20" width="2" height="3" fill="#05050a" />
+          <rect x="6" y="28" width="22" height="12" fill={c.body} stroke="#05050a" />
+          <rect x="5" y="39" width="8" height="5" fill={c.pants} stroke="#05050a" />
+          <rect x="20" y="39" width="8" height="5" fill={c.pants} stroke="#05050a" />
+        </>
+      )}
+    </svg>
+  );
+}
 
-        return (
+function TurntableQueue() {
+  return (
+    <div className="border border-[rgba(130,100,220,0.2)] bg-[rgba(10,10,18,0.88)] p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-black uppercase tracking-[0.16em]">Turntable Queue</h2>
+        <span className="kc-mono text-[10px] uppercase tracking-[0.16em] text-[var(--kc-teal)]">
+          room state
+        </span>
+      </div>
+      <div className="space-y-2">
+        {queue.map((track) => (
           <div
+            key={track.id}
+            className="flex items-center gap-3 border border-[rgba(130,100,220,0.2)] bg-[var(--kc-surface)] p-2 transition-colors hover:bg-[rgba(157,112,255,0.14)]"
+          >
+            <PixelAvatar outfit={track.dj.outfit} host={track.dj.host} small />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold">{track.track}</p>
+              <p className="kc-mono text-[10px] uppercase tracking-[0.12em] text-[#9e94c6]">
+                {track.dj.name} · {track.source}
+              </p>
+            </div>
+            {track.current ? <PlayingBars /> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MarketPulse({
+  listings,
+  isLoading,
+  error,
+}: {
+  listings: MarketListing[];
+  isLoading: boolean;
+  error: Error | null;
+}) {
+  return (
+    <div className="border border-[rgba(130,100,220,0.2)] bg-[rgba(10,10,18,0.88)] p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-black uppercase tracking-[0.16em]">Market Pulse</h2>
+        <span className="kc-mono text-[10px] uppercase tracking-[0.16em] text-[var(--kc-gold)]">
+          latest
+        </span>
+      </div>
+      <div className="space-y-2">
+        {error ? (
+          <p className="kc-mono border border-red-400/35 bg-red-950/20 p-3 text-xs text-red-200">
+            market feed unavailable
+          </p>
+        ) : isLoading ? (
+          <p className="kc-mono border border-[rgba(130,100,220,0.2)] bg-[var(--kc-surface)] p-3 text-xs text-[#9e94c6]">
+            loading listings...
+          </p>
+        ) : listings.length > 0 ? (
+          listings.map((listing, index) => (
+            <MarketPulseItem key={listing.id} listing={listing} index={index} />
+          ))
+        ) : (
+          <p className="kc-mono border border-[rgba(130,100,220,0.2)] bg-[var(--kc-surface)] p-3 text-xs text-[#9e94c6]">
+            no listings returned
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MarketPulseItem({
+  listing,
+  index,
+}: {
+  listing: MarketListing;
+  index: number;
+}) {
+  const isToken = listing.currency === "token";
+
+  return (
+    <Link
+      href={`/market/${encodeURIComponent(listing.itemType)}`}
+      className="flex items-center gap-3 border border-[rgba(130,100,220,0.2)] bg-[var(--kc-surface)] p-2 transition-colors hover:bg-[rgba(157,112,255,0.14)]"
+    >
+      <span className="flex h-9 w-9 items-center justify-center border border-[rgba(180,140,255,0.4)] bg-[var(--kc-deep)] text-lg">
+        {itemGlyphs[index % itemGlyphs.length]}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-bold">{listing.itemName}</p>
+        <p className="kc-mono text-[10px] uppercase tracking-[0.12em] text-[#9e94c6]">
+          x{formatNumber(listing.quantity)}
+        </p>
+      </div>
+      <span
+        className={`kc-mono text-xs font-bold ${isToken ? "text-[var(--kc-teal)]" : "text-[var(--kc-gold)]"}`}
+      >
+        {isToken ? "◈" : "⬡"} {formatNumber(listing.price)}
+      </span>
+    </Link>
+  );
+}
+
+function LoginCard() {
+  return (
+    <section className="border border-[rgba(130,100,220,0.2)] bg-[var(--kc-surface)] p-4">
+      <h2 className="text-sm font-black uppercase tracking-[0.16em]">Kintara Login</h2>
+      <p className="mt-2 text-sm leading-6 text-[#b8afd9]">
+        Enter as your avatar. TODO: implement Kintara username auth + avatar
+        mirroring when official profile access exists.
+      </p>
+      <Link
+        href="/account"
+        className="kc-mono mt-4 inline-flex h-10 w-full items-center justify-center border border-[rgba(180,140,255,0.4)] bg-[var(--kc-deep)] text-xs font-bold uppercase tracking-[0.16em] text-[var(--kc-teal)] transition-transform hover:-translate-y-1"
+      >
+        Enter
+      </Link>
+    </section>
+  );
+}
+
+function KinsTokenWidget({
+  stats,
+  isLoading,
+  error,
+}: {
+  stats?: TokenStats;
+  isLoading: boolean;
+  error: Error | null;
+}) {
+  const change = stats?.priceChange24h;
+  const isUp = (change ?? 0) >= 0;
+
+  return (
+    <section className="border border-[rgba(130,100,220,0.2)] bg-[var(--kc-surface)] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-black uppercase tracking-[0.16em]">$KINS Token</h2>
+          <p className="kc-mono mt-3 text-3xl font-bold text-[var(--kc-gold)]">
+            {isLoading ? "..." : stats?.priceUsd ? formatUsd(stats.priceUsd) : "N/A"}
+          </p>
+        </div>
+        <span
+          className={`kc-mono border px-2 py-1 text-xs font-bold ${isUp ? "border-[rgba(0,229,200,0.35)] text-[var(--kc-teal)]" : "border-red-400/40 text-red-300"}`}
+        >
+          {change === undefined ? "N/A" : `${change.toFixed(2)}%`}
+        </span>
+      </div>
+      {error ? (
+        <p className="kc-mono mt-3 border border-red-400/35 bg-red-950/20 p-2 text-xs text-red-200">
+          token feed unavailable
+        </p>
+      ) : null}
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <TokenStat label="Liquidity" value={stats?.liquidityUsd} />
+        <TokenStat label="Vol 24h" value={stats?.volume24h} />
+        <TokenStat label="Mkt Cap" value={stats?.marketCap} />
+        <TokenStat label="FDV" value={stats?.fdv} />
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <a
+          href={stats?.pairUrl ?? "https://dexscreener.com/solana"}
+          target="_blank"
+          rel="noreferrer"
+          className="kc-mono flex h-9 items-center justify-center gap-1 border border-[rgba(180,140,255,0.4)] bg-[var(--kc-deep)] text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--kc-pink)]"
+        >
+          Dex <ExternalLink className="h-3 w-3" />
+        </a>
+        <a
+          href={`https://solscan.io/token/${process.env.NEXT_PUBLIC_KINS_MINT ?? "Tqj8yFmagrg7oorpQkVGYR52r96RFTamvWfth9bpump"}`}
+          target="_blank"
+          rel="noreferrer"
+          className="kc-mono flex h-9 items-center justify-center gap-1 border border-[rgba(180,140,255,0.4)] bg-[var(--kc-deep)] text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--kc-teal)]"
+        >
+          Solscan <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
+    </section>
+  );
+}
+
+function TokenStat({ label, value }: { label: string; value?: number }) {
+  return (
+    <div className="border border-[rgba(130,100,220,0.2)] bg-[var(--kc-deep)] p-2">
+      <p className="kc-mono text-[10px] uppercase tracking-[0.14em] text-[#9e94c6]">
+        {label}
+      </p>
+      <p className="kc-mono mt-1 text-sm font-bold text-white">
+        {value === undefined ? "N/A" : `$${formatCompact(value)}`}
+      </p>
+    </div>
+  );
+}
+
+function ClubNowList() {
+  return (
+    <section className="border border-[rgba(130,100,220,0.2)] bg-[var(--kc-surface)] p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-black uppercase tracking-[0.16em]">In the Club Now</h2>
+        <span className="kc-mono text-xs text-[var(--kc-teal)]">{players.length}</span>
+      </div>
+      <div className="max-h-[292px] space-y-2 overflow-y-auto pr-1">
+        {players.map((player) => (
+          <div
+            key={player.id}
+            className="flex items-center gap-3 border border-[rgba(130,100,220,0.2)] bg-[var(--kc-deep)] p-2"
+          >
+            <PixelAvatar outfit={player.outfit} host={player.host} small />
+            <div>
+              <p className="text-sm font-bold">{player.name}</p>
+              <p className="kc-mono text-[10px] uppercase tracking-[0.12em] text-[#9e94c6]">
+                Level {player.level}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NowPlayingBar({ track }: { track: QueueTrack }) {
+  return (
+    <footer className="fixed bottom-0 left-0 right-0 z-[60] flex h-[68px] items-center gap-4 border-t border-[rgba(130,100,220,0.2)] bg-[var(--kc-void)] px-6">
+      <div className="flex h-11 w-11 items-center justify-center border border-[rgba(180,140,255,0.4)] bg-[var(--kc-surface)] text-2xl">
+        💿
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-black uppercase tracking-[0.12em]">
+          {track.track}
+        </p>
+        <p className="kc-mono truncate text-[11px] uppercase tracking-[0.14em] text-[#9e94c6]">
+          DJ {track.dj.name} · Level {track.dj.level}
+        </p>
+      </div>
+      <div className="ml-auto flex h-8 items-end gap-1">
+        {Array.from({ length: 28 }).map((_, index) => (
+          <span
             key={index}
-            className="h-11 w-11 transition-colors duration-500"
+            className="w-1 bg-[var(--kc-teal)]"
             style={{
-              backgroundColor: color,
-              boxShadow: `0 0 ${index % 2 ? 20 : 10}px ${color}`,
+              animation: "kc-wave 0.9s ease-in-out infinite",
+              animationDelay: `${index * 0.045}s`,
             }}
           />
-        );
-      })}
-    </div>
+        ))}
+      </div>
+    </footer>
   );
 }
 
-function Seating() {
-  const seats = [
-    [160, 426],
-    [270, 454],
-    [386, 490],
-  ];
-
+function PlayingBars() {
   return (
-    <>
-      {seats.map(([x, y], index) => (
-        <div key={`${x}-${y}`} className="absolute" style={{ left: x, top: y }}>
-          <div className="absolute h-12 w-64 border-2 border-[#130f14] bg-[#15131d]" />
-          <div className="absolute left-8 top-3 h-7 w-12 bg-[#3b2b25] shadow-[74px_0_0_#3b2b25,148px_0_0_#3b2b25]" />
-          <div className="absolute left-[68px] top-14 h-9 w-16 border-2 border-[#130f14] bg-[#1c1b25]">
-            <div className="m-auto mt-2 h-4 w-4 bg-fuchsia-200 shadow-[0_0_14px_#f0abfc]" />
-          </div>
-          <span className="absolute left-2 top-[-16px] text-[10px] font-black uppercase tracking-[0.16em] text-[#756d8c]">
-            table {index + 1}
-          </span>
-        </div>
+    <div className="flex h-5 items-end gap-0.5">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <span
+          key={index}
+          className="w-1 bg-[var(--kc-teal)]"
+          style={{
+            animation: "kc-bars 0.7s ease-in-out infinite",
+            animationDelay: `${index * 0.12}s`,
+          }}
+        />
       ))}
-    </>
-  );
-}
-
-function ExitDoor() {
-  return (
-    <div className="absolute left-[54px] top-[392px] h-24 w-[54px] border-2 border-[#18131c] bg-[#0d0d12]">
-      <div className="absolute left-2 top-2 rounded-sm border border-emerald-300 px-1 text-[10px] font-black text-emerald-300 shadow-[0_0_12px_#34d399]">
-        EXIT
-      </div>
-      <div className="absolute left-8 top-8 h-16 w-12 bg-[#1d1720]" />
     </div>
-  );
-}
-
-function Restrooms() {
-  return (
-    <div className="absolute left-[794px] top-[62px] flex gap-3">
-      <div className="h-[88px] w-14 border-2 border-[#18131c] bg-[#0d0d12] text-center text-lg font-black leading-[84px] text-blue-300 shadow-[0_0_12px_#60a5fa]">
-        M
-      </div>
-      <div className="h-[88px] w-14 border-2 border-[#18131c] bg-[#0d0d12] text-center text-lg font-black leading-[84px] text-fuchsia-300 shadow-[0_0_12px_#f0abfc]">
-        W
-      </div>
-    </div>
-  );
-}
-
-function Planter({ x, y }: { x: number; y: number }) {
-  return (
-    <div className="absolute" style={{ left: x, top: y }}>
-      <div className="absolute left-0 top-10 h-10 w-10 bg-[#e2ddd1]" />
-      <div className="absolute left-2 top-2 h-8 w-8 bg-[#254d25]" />
-      <div className="absolute left-8 top-8 h-7 w-7 bg-[#37692e]" />
-      <div className="absolute left-[-8px] top-6 h-7 w-7 bg-[#2d632a]" />
-    </div>
-  );
-}
-
-function RopeLine({ x, y }: { x: number; y: number }) {
-  return (
-    <div className="absolute" style={{ left: x, top: y }}>
-      <div className="absolute left-0 top-0 h-10 w-2 bg-[#c99a37]" />
-      <div className="absolute left-28 top-0 h-10 w-2 bg-[#c99a37]" />
-      <div className="absolute left-2 top-5 h-2 w-28 bg-[#7f1d1d]" />
-    </div>
-  );
-}
-
-function RoomAvatar({ guest, pulse }: { guest: ClubGuest; pulse: number }) {
-  const body: Record<AvatarTone, string> = {
-    bone: "#f2f0e5",
-    purple: "#6d3bbd",
-    lime: "#9bd934",
-    red: "#d84d3d",
-    blue: "#2563eb",
-    gold: "#d6b64a",
-  };
-  const hair: Record<AvatarTone, string> = {
-    bone: "#f2f0e5",
-    purple: "#111111",
-    lime: "#ddf34f",
-    red: "#171717",
-    blue: "#171717",
-    gold: "#3b2d18",
-  };
-  const bob = pulse % 2 === 0 ? 0 : -3;
-
-  return (
-    <div
-      className="absolute h-[100px] w-[86px] rotate-[-26deg]"
-      style={{ left: guest.x, top: guest.y + bob }}
-    >
-      <div className="absolute left-[8px] top-[-26px] w-56 -translate-x-1/2 text-center text-[12px] font-black leading-3 text-white [text-shadow:0_2px_0_#000,1px_0_0_#000,-1px_0_0_#000]">
-        <span className="block text-[10px] text-[#ff5577]">Lvl {guest.level}</span>
-        {guest.name}
-      </div>
-      <div
-        className="absolute left-[22px] top-[8px] h-[27px] w-[29px] border-2 border-black"
-        style={{ backgroundColor: hair[guest.tone] }}
-      />
-      <div className="absolute left-[23px] top-[20px] h-[29px] w-[31px] border-2 border-black bg-[#d3ad88]">
-        <span className="absolute left-1.5 top-2 h-1.5 w-1.5 bg-black" />
-        <span className="absolute right-1.5 top-2 h-1.5 w-1.5 bg-black" />
-      </div>
-      <div
-        className="absolute left-[20px] top-[50px] h-[32px] w-[36px] border-2 border-black"
-        style={{ backgroundColor: body[guest.tone] }}
-      />
-      <div className="absolute left-[16px] top-[79px] h-5 w-4 border-2 border-black bg-[#202631]" />
-      <div className="absolute left-[48px] top-[79px] h-5 w-4 border-2 border-black bg-[#202631]" />
-      {guest.id === "host" ? (
-        <Crown className="absolute left-[42px] top-[1px] h-4 w-4 text-yellow-300" />
-      ) : null}
-    </div>
-  );
-}
-
-function SafetyPill({
-  icon: Icon,
-  text,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  text: string;
-}) {
-  return (
-    <span className="inline-flex h-10 items-center gap-2 rounded-md border-2 border-emerald-500/30 bg-emerald-500/10 px-3 text-sm font-semibold text-emerald-100">
-      <Icon className="h-4 w-4 text-emerald-300" />
-      {text}
-    </span>
-  );
-}
-
-function RoomNowPlaying() {
-  return (
-    <Panel title="Now playing" icon={Headphones}>
-      <div className="rounded-lg border-2 border-fuchsia-400/30 bg-fuchsia-500/10 p-4">
-        <p className="text-lg font-semibold">Crab Market Open</p>
-        <p className="mt-1 text-sm text-muted-foreground">deckhand on the booth</p>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-          <div className="h-full w-2/3 bg-gradient-to-r from-fuchsia-400 to-blue-400 shadow-[0_0_16px_#d946ef]" />
-        </div>
-        <div className="mt-3 flex items-center justify-between text-xs font-semibold text-muted-foreground">
-          <span>02:18</span>
-          <span>03:42</span>
-        </div>
-      </div>
-    </Panel>
-  );
-}
-
-function RoomQueue() {
-  return (
-    <Panel title="DJ queue" icon={Radio}>
-      <div className="space-y-2">
-        {queue.map((item, index) => (
-          <div
-            key={item.track}
-            className="rounded-lg border-2 bg-muted/20 p-3"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-semibold">{item.track}</p>
-              <span className="text-xs font-black text-primary">{item.eta}</span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              #{index + 1} by {item.user}
-            </p>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
-}
-
-function RoomPresence({
-  zoneCounts,
-}: {
-  zoneCounts: Record<ClubGuest["zone"], number>;
-}) {
-  return (
-    <Panel title="Room presence" icon={Users}>
-      <div className="grid grid-cols-2 gap-2">
-        {Object.entries(zoneCounts).map(([zone, count]) => (
-          <div key={zone} className="rounded-lg border-2 bg-muted/20 p-3">
-            <p className="text-xs font-black uppercase tracking-[0.12em] text-muted-foreground">
-              {zone}
-            </p>
-            <p className="mt-1 text-2xl font-semibold">{count}</p>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
-}
-
-function MirrorPipeline() {
-  return (
-    <Panel title="Avatar mirror" icon={Sparkles}>
-      <div className="rounded-lg border-2 border-amber-400/30 bg-amber-500/10 p-3">
-        <p className="text-sm font-semibold text-amber-100">
-          Future official integration
-        </p>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          When Kintara exposes login/profile data, the room can map each session
-          user to their display name, level, outfit, and cosmetics. Until then this
-          page uses mock avatars only.
-        </p>
-      </div>
-    </Panel>
-  );
-}
-
-function RoomChat() {
-  return (
-    <Panel title="Alpha chat" icon={MessageSquare}>
-      <div className="space-y-2">
-        {chatLines.map((line) => (
-          <div key={`${line.user}-${line.text}`} className="rounded-lg bg-muted/20 p-3">
-            <p className="text-xs font-black uppercase tracking-[0.12em] text-primary">
-              {line.user}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">{line.text}</p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 flex h-10 items-center gap-2 rounded-lg border-2 bg-background/70 px-3 text-sm text-muted-foreground">
-        <Mic2 className="h-4 w-4 text-primary" />
-        Chat composer disabled in visual MVP
-      </div>
-    </Panel>
-  );
-}
-
-function Panel({
-  title,
-  icon: Icon,
-  children,
-}: {
-  title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="kintara-panel rounded-lg p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Icon className="h-4 w-4 text-primary" />
-        <h2 className="font-semibold">{title}</h2>
-      </div>
-      {children}
-    </section>
   );
 }
