@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
 import { ItemActivityFeed } from "@/components/ItemActivityFeed";
 import { ItemMetricCards } from "@/components/ItemMetricCards";
@@ -12,7 +12,7 @@ import { ItemOrderBook } from "@/components/ItemOrderBook";
 import { ItemPriceHistoryChart } from "@/components/ItemPriceHistoryChart";
 import { LiveStatusPill } from "@/components/LiveStatusPill";
 import { WatchlistButton } from "@/components/WatchlistButton";
-import { fetchMarketEvents } from "@/lib/liveMarketApi";
+import { fetchLiveMarket, fetchMarketEvents } from "@/lib/liveMarketApi";
 import { formatRelativeSeconds } from "@/lib/format";
 import type { ItemMarketResponse } from "@/lib/types";
 
@@ -55,6 +55,25 @@ export default function ItemDetailPage() {
     refetchIntervalInBackground: true,
     placeholderData: (previousData) => previousData,
   });
+  const allItemsQuery = useQuery({
+    queryKey: ["market-all-item-types"],
+    queryFn: () => fetchLiveMarket({ limit: 200, sort: "latest" }),
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (previousData) => previousData,
+  });
+  const itemTypes = useMemo(() => {
+    const types = new Set(
+      (allItemsQuery.data?.listings ?? []).map((l) => l.itemType),
+    );
+    return Array.from(types).sort();
+  }, [allItemsQuery.data]);
+  const currentIndex = itemTypes.indexOf(itemType);
+  const prevType = currentIndex > 0 ? itemTypes[currentIndex - 1] : null;
+  const nextType =
+    currentIndex >= 0 && currentIndex < itemTypes.length - 1
+      ? itemTypes[currentIndex + 1]
+      : null;
+
   const data = itemQuery.data;
   const itemName =
     data?.metrics.cheapestGoldListing?.itemName ??
@@ -72,13 +91,52 @@ export default function ItemDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/market"
-        className="inline-flex items-center gap-2 rounded-md border-2 px-3 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to market
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link
+          href="/market"
+          className="inline-flex items-center gap-2 rounded-md border-2 px-3 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to market
+        </Link>
+        <div className="ml-auto flex items-center gap-1">
+          {prevType ? (
+            <Link
+              href={`/market/${encodeURIComponent(prevType)}`}
+              className="inline-flex items-center gap-1 rounded-md border-2 px-2 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10"
+              title={prevType}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Prev
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-md border-2 border-muted px-2 py-2 text-xs font-semibold text-muted-foreground opacity-40">
+              <ChevronLeft className="h-4 w-4" />
+              Prev
+            </span>
+          )}
+          {itemTypes.length > 0 && currentIndex >= 0 && (
+            <span className="kc-mono px-2 text-xs text-muted-foreground">
+              {currentIndex + 1} / {itemTypes.length}
+            </span>
+          )}
+          {nextType ? (
+            <Link
+              href={`/market/${encodeURIComponent(nextType)}`}
+              className="inline-flex items-center gap-1 rounded-md border-2 px-2 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10"
+              title={nextType}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-md border-2 border-muted px-2 py-2 text-xs font-semibold text-muted-foreground opacity-40">
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </span>
+          )}
+        </div>
+      </div>
 
       <section className="kintara-panel rounded-lg p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
